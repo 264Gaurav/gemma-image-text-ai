@@ -556,3 +556,27 @@
     scrollbar-color: rgba(255,255,255,0.2) transparent;
   }
   
+
+  .input-container::-webkit-scrollbar {
+    width: 2px;
+  }
+
+   .input-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+   .input-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+  }
+  
+   .input-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Firefox */
+   .input-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
+  }
+  
