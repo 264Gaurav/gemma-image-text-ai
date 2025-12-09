@@ -309,6 +309,10 @@
     max-height: 300px;
     overflow-y: auto;
   }
+
+  .assistant-text{
+    padding-left: 10px;
+  }
   
   /* Markdown Styling */
   .assistant-text h1,
@@ -321,6 +325,20 @@
     margin-top: 20px;
     margin-bottom: 10px;
     font-weight: 600;
+  }
+
+  .assistant-text ul{
+    padding-left: 20px;
+  }
+
+  .assistant-text li,
+  .assistant-text ol{
+    padding-left: 10px;
+  }
+
+  .assistant-text p,
+  .assistant-text hr{
+    margin-top: 10px;
   }
   
   /* Typing Indicator */
