@@ -239,24 +239,28 @@
     box-shadow: 0 1px 0 rgba(0,0,0,0.35);
   }
   
-  /* Actions moved below messages and shown on hover */
-  .message-actions {
-    display: flex;
-    gap: 8px;
-    opacity: 0;
-    transition: opacity 0.15s, transform 0.2s;
-    justify-content: flex-end;
-    align-items: start;
-    pointer-events: none; /* disable click when hidden */
+
+  
+/* Hover zone controls actions visibility */
+.hover-zone {
+    position: relative;
   }
   
-  .message-content .user-text-wrapper:hover + .message-actions,
-  .message-content .assistant-text-wrapper:hover + .message-actions,
-  .message-content .edit-container:hover + .message-actions {
+  /* Default hidden */
+  .hover-zone .message-actions {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  
+  /* Show actions when hovering ANY part of message block */
+  .hover-zone:hover .message-actions {
     opacity: 1;
-    pointer-events: auto; /* enable click when visible */
+    pointer-events: auto;
     transform: translateY(0);
   }
+  
   
   /* action buttons */
   .message-action-btn {

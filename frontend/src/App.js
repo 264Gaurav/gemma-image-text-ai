@@ -1,28 +1,41 @@
 // App.js
-import React, { useState, useRef, useEffect } from 'react';
-import './AppNew.css';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import React, { useState, useRef, useEffect } from "react";
+import "./AppNew.css";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import Swal from "sweetalert2";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 function nowIsoShort() {
   const d = new Date();
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
+const toast = Swal.mixin({
+  toast: true,
+  position: "bottom-end",
+  showConfirmButton: false,
+  timer: 1800,
+  timerProgressBar: true,
+  didOpen: (toast) => {
+    toast.addEventListener("mouseenter", Swal.stopTimer);
+    toast.addEventListener("mouseleave", Swal.resumeTimer);
+  },
+});
 
 function App() {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
-  const [editText, setEditText] = useState('');
+  const [editText, setEditText] = useState("");
   const [, setStreamingIndex] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -32,7 +45,7 @@ function App() {
   // helper: scroll to bottom
   useEffect(() => {
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     });
   }, [messages]);
 
@@ -40,7 +53,7 @@ function App() {
   useEffect(() => {
     const t = textareaRef.current;
     if (t) {
-      t.style.height = 'auto';
+      t.style.height = "auto";
       const sh = t.scrollHeight;
       t.style.height = `${Math.min(sh, 200)}px`;
     }
@@ -57,16 +70,16 @@ function App() {
   const handleImageUpload = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (!f.type.startsWith('image/')) {
-      setError('Please upload an image file');
+    if (!f.type.startsWith("image/")) {
+      setError("Please upload an image file");
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
-      setError('Image size should be less than 10MB');
+      setError("Image size should be less than 10MB");
       return;
     }
     setImageFile(f);
-    setImageUrl('');
+    setImageUrl("");
     setError(null);
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
@@ -76,8 +89,8 @@ function App() {
   const handleRemoveImage = () => {
     setImageFile(null);
     setImagePreview(null);
-    setImageUrl('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setImageUrl("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // Central streaming helper - returns a promise that resolves when done
@@ -87,19 +100,19 @@ function App() {
     abortControllerRef.current = ac;
     try {
       const resp = await fetch(`${API_URL}/stream-analyze`, {
-        method: 'POST',
+        method: "POST",
         body: formData,
         signal: ac.signal,
       });
 
       if (!resp.ok) {
-        const j = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+        const j = await resp.json().catch(() => ({ detail: "Unknown error" }));
         throw new Error(j.detail || `HTTP ${resp.status}`);
       }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -108,19 +121,19 @@ function App() {
 
         // process SSE events separated by \n\n
         let idx;
-        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
           const ev = buffer.slice(0, idx);
           buffer = buffer.slice(idx + 2);
 
-          let eventType = 'message';
-          let dataStr = '';
-          const lines = ev.split('\n');
+          let eventType = "message";
+          let dataStr = "";
+          const lines = ev.split("\n");
           for (const line of lines) {
-            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-            else if (line.startsWith('data: ')) dataStr += line.slice(6);
+            if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataStr += line.slice(6);
           }
 
-          if (eventType === 'done') {
+          if (eventType === "done") {
             onDone && onDone();
             return;
           }
@@ -135,7 +148,8 @@ function App() {
             }
 
             if (parsed.error) {
-              const errMsg = parsed.message || parsed.detail || 'Streaming error';
+              const errMsg =
+                parsed.message || parsed.detail || "Streaming error";
               onError && onError(errMsg);
               return;
             }
@@ -147,14 +161,15 @@ function App() {
 
       // final leftover buffer parse (defensive)
       if (buffer.trim()) {
-        const lines = buffer.split('\n');
-        let dataLine = lines.find(l => l.startsWith('data: '));
+        const lines = buffer.split("\n");
+        let dataLine = lines.find((l) => l.startsWith("data: "));
         if (dataLine) {
           const dataStr = dataLine.slice(6);
           try {
             const parsed = JSON.parse(dataStr);
             if (parsed.error) {
-              onError && onError(parsed.message || parsed.detail || 'Streaming error');
+              onError &&
+                onError(parsed.message || parsed.detail || "Streaming error");
             } else {
               onChunk && onChunk(parsed);
             }
@@ -164,10 +179,10 @@ function App() {
 
       onDone && onDone();
     } catch (err) {
-      if (err.name === 'AbortError') {
-        onError && onError('Stream aborted');
+      if (err.name === "AbortError") {
+        onError && onError("Stream aborted");
       } else {
-        onError && onError(err.message || 'Stream failed');
+        onError && onError(err.message || "Stream failed");
       }
     } finally {
       abortControllerRef.current = null;
@@ -180,41 +195,39 @@ function App() {
 
     // create message objects in one go to have deterministic indexes
     const userMessage = {
-      role: 'user',
+      role: "user",
       content: promptText,
       image: imageDataUrl || null,
       timestamp: nowIsoShort(),
     };
     const assistantPlaceholder = {
-      role: 'assistant',
-      content: '',
+      role: "assistant",
+      content: "",
       streaming: true,
       timestamp: nowIsoShort(),
     };
 
     // append both messages atomically and keep track of assistant index
-    setMessages(prev => {
+    setMessages((prev) => {
       const next = [...prev, userMessage, assistantPlaceholder];
       return next;
     });
-
-
 
     // we will update assistant message by targeting the last element at the time of update using functional set
     setStreamingIndex((idx) => idx); // no-op but keeps the state key used
 
     const formData = new FormData();
-    formData.append('prompt', promptText);
-    if (imageFileObj) formData.append('image', imageFileObj);
-    else if (imageDataUrl) formData.append('image_url', imageDataUrl);
+    formData.append("prompt", promptText);
+    if (imageFileObj) formData.append("image", imageFileObj);
+    else if (imageDataUrl) formData.append("image_url", imageDataUrl);
 
-    let accumulatedText = '';
+    let accumulatedText = "";
 
     // Handlers to update the assistant placeholder deterministically
     const safeUpdateAssistant = (updater) => {
-      setMessages(prev => {
+      setMessages((prev) => {
         // find the last assistant placeholder from the end
-        const index = prev.map(m => m.role).lastIndexOf('assistant');
+        const index = prev.map((m) => m.role).lastIndexOf("assistant");
         if (index === -1) return prev;
         const copy = [...prev];
         copy[index] = { ...copy[index], ...updater(copy[index]) };
@@ -231,25 +244,36 @@ function App() {
           // parsed.text is appended chunk
           if (parsed.text) {
             accumulatedText += parsed.text;
-            safeUpdateAssistant(prev => ({ content: accumulatedText, streaming: true }));
+            safeUpdateAssistant((prev) => ({
+              content: accumulatedText,
+              streaming: true,
+            }));
             // keep scroll near bottom
-            requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }));
+            requestAnimationFrame(() =>
+              messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
+            );
           }
         },
         onDone: () => {
-          safeUpdateAssistant(prev => ({ content: accumulatedText, streaming: false }));
+          safeUpdateAssistant((prev) => ({
+            content: accumulatedText,
+            streaming: false,
+          }));
           setStreamingIndex(null);
           setLoading(false);
         },
         onError: (msg) => {
-          safeUpdateAssistant(prev => ({ content: `Error: ${msg}`, streaming: false }));
+          safeUpdateAssistant((prev) => ({
+            content: `Error: ${msg}`,
+            streaming: false,
+          }));
           setError(msg);
           setStreamingIndex(null);
           setLoading(false);
-        }
+        },
       });
     } catch (err) {
-      setError(err.message || 'Failed to stream');
+      setError(err.message || "Failed to stream");
       setLoading(false);
       setStreamingIndex(null);
     } finally {
@@ -263,8 +287,12 @@ function App() {
     e?.preventDefault();
     if (!input.trim() && !imageFile && !imageUrl) return;
 
-    const currentPrompt = input.trim() || (imageFile || imageUrl ? 'What is in this image? Describe it in detail.' : '');
-    setInput('');
+    const currentPrompt =
+      input.trim() ||
+      (imageFile || imageUrl
+        ? "What is in this image? Describe it in detail."
+        : "");
+    setInput("");
     setError(null);
 
     sendPrompt({
@@ -275,101 +303,180 @@ function App() {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
+    const result = await Swal.fire({
+      title: "Clear entire chat?",
+      text: "All messages will be permanently deleted.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      confirmButtonText: "Clear chat",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) {
+      toast.fire({ icon: "info", title: "Clear cancelled" });
+      return;
+    }
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
-      abortControllerRef.current = null;
     }
+
     setMessages([]);
-    setInput('');
+    setInput("");
     setImageFile(null);
     setImagePreview(null);
-    setImageUrl('');
+    setImageUrl("");
     setError(null);
-    setStreamingIndex(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    toast.fire({
+      icon: "success",
+      title: "Chat cleared",
+    });
   };
 
   // message action helpers
   const copyToClipboard = async (text) => {
+    if (!text) {
+      toast.fire({ icon: "warning", title: "Nothing to copy" });
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(text);
-      // could add toast
+      toast.fire({
+        icon: "success",
+        title: "Copied to clipboard",
+      });
     } catch {
-      console.warn('copy failed');
+      toast.fire({
+        icon: "error",
+        title: "Copy failed",
+      });
     }
   };
 
   const handleEditMessage = (index) => {
     setEditingIndex(index);
-    setEditText(messages[index]?.content || '');
+    setEditText(messages[index]?.content || "");
   };
 
   const handleSaveEdit = (index) => {
-    if (!editText.trim()) return;
-    setMessages(prev => {
+    if (!editText.trim()) {
+      toast.fire({ icon: "warning", title: "Message cannot be empty" });
+      return;
+    }
+
+    setMessages((prev) => {
       const cp = [...prev];
       cp[index] = { ...cp[index], content: editText.trim() };
       return cp;
     });
+
     setEditingIndex(null);
-    setEditText('');
+    setEditText("");
+
+    toast.fire({
+      icon: "success",
+      title: "Message updated",
+    });
   };
 
   const handleCancelEdit = () => {
     setEditingIndex(null);
-    setEditText('');
+    setEditText("");
+    toast.fire({ icon: "info", title: "Edit cancelled" });
   };
 
-  const handleDelete = (index) => {
-    setMessages(prev => {
-      const cp = [...prev];
-      cp.splice(index, 1);
-      return cp;
+  const handleDelete = async (index) => {
+    const result = await Swal.fire({
+      title: "Delete message?",
+      text: "This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#2f3136",
+      confirmButtonText: "Delete",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) {
+      toast.fire({ icon: "info", title: "Delete cancelled" });
+      return;
+    }
+
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated.splice(index, 1);
+      return updated;
+    });
+
+    toast.fire({
+      icon: "success",
+      title: "Message deleted",
     });
   };
 
   // regenerate: take the user message before the assistant at index-1 if assistant exists
-  const handleRegenerate = (assistantIndex) => {
-    // find the previous user message
+  const handleRegenerate = async (assistantIndex) => {
+    const result = await Swal.fire({
+      title: "Regenerate response?",
+      text: "The previous response will be replaced.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Regenerate",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) {
+      toast.fire({ icon: "info", title: "Regeneration cancelled" });
+      return;
+    }
+
     const userIndex = (() => {
-      // look backwards from assistantIndex-1 to find role==='user'
       for (let i = assistantIndex - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') return i;
+        if (messages[i].role === "user") return i;
       }
       return -1;
     })();
 
     if (userIndex === -1) {
-      setError('Cannot find the original user message to regenerate.');
+      toast.fire({ icon: "error", title: "Cannot find prompt" });
       return;
     }
 
-    const promptText = messages[userIndex].content;
-    const img = messages[userIndex].image || null;
+    toast.fire({ icon: "info", title: "Regenerating..." });
 
-    // If image is a data-url (preview) we pass it as image_url; otherwise pass null
     sendPrompt({
-      promptText,
-      imageDataUrl: img,
+      promptText: messages[userIndex].content,
+      imageDataUrl: messages[userIndex].image || null,
       imageFileObj: null,
     });
   };
 
   const handleReact = (index, reaction) => {
-    setMessages(prev => {
+    setMessages((prev) => {
       const cp = [...prev];
       const msg = cp[index];
       if (!msg) return prev;
-      const current = msg.reaction === reaction ? null : reaction;
-      cp[index] = { ...msg, reaction: current };
+      cp[index] = {
+        ...msg,
+        reaction: msg.reaction === reaction ? null : reaction,
+      };
       return cp;
+    });
+
+    toast.fire({
+      icon: "success",
+      title:
+        reaction === "like" ? "Marked as helpful" : "Marked as not helpful",
     });
   };
 
@@ -412,11 +519,11 @@ function App() {
 
           {messages.map((message, index) => (
             <div key={index} className={`message ${message.role}`}>
-              {message.role === 'user' && (
+              {message.role === "user" && (
                 <div className="message-avatar user-avatar">👤</div>
               )}
               <div className={`message-content-wrapper ${message.role}`}>
-                <div className="message-content">
+                <div className="message-content hover-zone">
                   {message.image && (
                     <div className="message-image">
                       <img src={message.image} alt="Uploaded" />
@@ -434,10 +541,18 @@ function App() {
                         autoFocus
                       />
                     </div>
-                  ) : message.role === 'user' ? (
+                  ) : message.role === "user" ? (
                     <div className="user-text-wrapper">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ flex: 1 }} className="user-text">{message.content}</div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ flex: 1 }} className="user-text">
+                          {message.content}
+                        </div>
                         <div className="message-meta">{message.timestamp}</div>
                       </div>
                     </div>
@@ -448,8 +563,16 @@ function App() {
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
-                              code({ node, inline, className, children, ...props }) {
-                                const match = /language-(\w+)/.exec(className || '');
+                              code({
+                                node,
+                                inline,
+                                className,
+                                children,
+                                ...props
+                              }) {
+                                const match = /language-(\w+)/.exec(
+                                  className || ""
+                                );
                                 return !inline && match ? (
                                   <SyntaxHighlighter
                                     style={vscDarkPlus}
@@ -457,7 +580,7 @@ function App() {
                                     PreTag="div"
                                     {...props}
                                   >
-                                    {String(children).replace(/\n$/, '')}
+                                    {String(children).replace(/\n$/, "")}
                                   </SyntaxHighlighter>
                                 ) : (
                                   <code className={className} {...props}>
@@ -478,15 +601,21 @@ function App() {
                           </ReactMarkdown>
                         ) : (
                           <div className="typing-indicator">
-                            <span></span><span></span><span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
                           </div>
                         )}
                         {message.streaming && message.content && (
                           <span className="streaming-cursor">▊</span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <div className="message-meta" style={{ marginTop: 6 }}>{message.timestamp}</div>
+                      <div
+                        style={{ display: "flex", justifyContent: "flex-end" }}
+                      >
+                        <div className="message-meta" style={{ marginTop: 6 }}>
+                          {message.timestamp}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -496,14 +625,14 @@ function App() {
                     {/* Common actions */}
                     <button
                       className="message-action-btn"
-                      onClick={() => copyToClipboard(message.content || '')}
+                      onClick={() => copyToClipboard(message.content || "")}
                       title="Copy"
                     >
                       📋 Copy
                     </button>
 
                     {/* Edit only for user messages */}
-                    {message.role === 'user' && (
+                    {message.role === "user" && (
                       <button
                         className="message-action-btn"
                         onClick={() => handleEditMessage(index)}
@@ -523,7 +652,7 @@ function App() {
                     </button>
 
                     {/* Regenerate - only show for assistant messages */}
-                    {message.role === 'assistant' && (
+                    {message.role === "assistant" && (
                       <button
                         className="message-action-btn"
                         onClick={() => handleRegenerate(index)}
@@ -536,17 +665,27 @@ function App() {
                     {/* Reactions */}
                     <button
                       className="message-action-btn"
-                      onClick={() => handleReact(index, 'like')}
+                      onClick={() => handleReact(index, "like")}
                       title="Like"
-                      style={{ background: message.reaction === 'like' ? 'rgba(25,195,125,0.12)' : undefined }}
+                      style={{
+                        background:
+                          message.reaction === "like"
+                            ? "rgba(25,195,125,0.12)"
+                            : undefined,
+                      }}
                     >
                       👍
                     </button>
                     <button
                       className="message-action-btn"
-                      onClick={() => handleReact(index, 'dislike')}
+                      onClick={() => handleReact(index, "dislike")}
                       title="Dislike"
-                      style={{ background: message.reaction === 'dislike' ? 'rgba(239,68,68,0.08)' : undefined }}
+                      style={{
+                        background:
+                          message.reaction === "dislike"
+                            ? "rgba(239,68,68,0.08)"
+                            : undefined,
+                      }}
                     >
                       👎
                     </button>
@@ -556,7 +695,7 @@ function App() {
                       className="message-action-btn"
                       onClick={() => {
                         // quick "save" - we simply copy content to clipboard for now
-                        copyToClipboard(message.content || '');
+                        copyToClipboard(message.content || "");
                         // you can replace with a real save/export feature
                       }}
                       title="Save"
@@ -568,14 +707,24 @@ function App() {
                   {/* Edit action buttons (when editing) */}
                   {editingIndex === index && (
                     <div className="message-actions" style={{ marginTop: 10 }}>
-                      <button className="message-action-btn" onClick={() => handleSaveEdit(index)}>Save</button>
-                      <button className="message-action-btn" onClick={handleCancelEdit}>Cancel</button>
+                      <button
+                        className="message-action-btn"
+                        onClick={() => handleSaveEdit(index)}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="message-action-btn"
+                        onClick={handleCancelEdit}
+                      >
+                        Cancel
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
 
-              {message.role === 'assistant' && (
+              {message.role === "assistant" && (
                 <div className="message-avatar assistant-avatar">🤖</div>
               )}
             </div>
@@ -584,7 +733,9 @@ function App() {
           {error && (
             <div className="error-banner">
               ⚠️ {error}
-              <button onClick={() => setError(null)} className="error-close">×</button>
+              <button onClick={() => setError(null)} className="error-close">
+                ×
+              </button>
             </div>
           )}
 
@@ -596,7 +747,9 @@ function App() {
           {(imagePreview || imageUrl) && (
             <div className="image-attachment">
               <img src={imagePreview || imageUrl} alt="Preview" />
-              <button onClick={handleRemoveImage} className="remove-attachment">×</button>
+              <button onClick={handleRemoveImage} className="remove-attachment">
+                ×
+              </button>
             </div>
           )}
 
@@ -615,7 +768,7 @@ function App() {
                 type="file"
                 accept="image/*"
                 onChange={handleImageUpload}
-                style={{ display: 'none' }}
+                style={{ display: "none" }}
               />
 
               <textarea
@@ -623,7 +776,7 @@ function App() {
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
-                  e.target.style.height = 'auto';
+                  e.target.style.height = "auto";
                   const sh = e.target.scrollHeight;
                   e.target.style.height = `${Math.min(sh, 200)}px`;
                 }}
@@ -637,7 +790,7 @@ function App() {
                 type="submit"
                 disabled={loading || (!input.trim() && !imageFile && !imageUrl)}
                 className="send-btn"
-                title={loading ? 'Streaming...' : 'Send'}
+                title={loading ? "Streaming..." : "Send"}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path
@@ -658,17 +811,6 @@ function App() {
 }
 
 export default App;
-
-
-
-
-
-
-
-
-
-
-
 
 // import React, { useState, useRef, useEffect } from 'react';
 // import './App.css';
@@ -694,7 +836,6 @@ export default App;
 //   const fileInputRef = useRef(null);
 //   const textareaRef = useRef(null);
 //   const abortControllerRef = useRef(null);
-
 
 //   // Auto-scroll to bottom when new messages arrive
 //   useEffect(() => {
@@ -730,7 +871,7 @@ export default App;
 //         setError('Please upload an image file');
 //         return;
 //       }
-      
+
 //       if (file.size > 10 * 1024 * 1024) {
 //         setError('Image size should be less than 10MB');
 //         return;
@@ -739,7 +880,7 @@ export default App;
 //       setImageFile(file);
 //       setImageUrl('');
 //       setError(null);
-      
+
 //       const reader = new FileReader();
 //       reader.onloadend = () => {
 //         setImagePreview(reader.result);
@@ -759,7 +900,7 @@ export default App;
 
 //   const handleSend = async (e) => {
 //     e?.preventDefault();
-    
+
 //     if (!input.trim() && !imageFile && !imageUrl) {
 //       return;
 //     }
@@ -824,24 +965,24 @@ export default App;
 
 //       while (true) {
 //         const { done, value } = await reader.read();
-        
+
 //         if (done) {
 //           break;
 //         }
 
 //         buffer += decoder.decode(value, { stream: true });
-        
+
 //         // Process complete SSE events (ending with \n\n)
 //         let eventEndIndex;
 //         while ((eventEndIndex = buffer.indexOf('\n\n')) !== -1) {
 //           const eventText = buffer.slice(0, eventEndIndex);
 //           buffer = buffer.slice(eventEndIndex + 2);
-          
+
 //           // Parse SSE event
 //           const lines = eventText.split('\n');
 //           let eventType = 'message';
 //           let eventData = '';
-          
+
 //           for (const line of lines) {
 //             if (line.startsWith('event: ')) {
 //               eventType = line.slice(7).trim();
@@ -849,21 +990,21 @@ export default App;
 //               eventData = line.slice(6);
 //             }
 //           }
-          
+
 //           // Handle done event
 //           if (eventType === 'done') {
 //             break;
 //           }
-          
+
 //           // Parse data
 //           if (eventData) {
 //             try {
 //               const parsed = JSON.parse(eventData);
-              
+
 //               if (parsed.error) {
 //                 throw new Error(parsed.message || parsed.detail || 'Streaming error');
 //               }
-              
+
 //               if (parsed.text) {
 //                 accumulatedText += parsed.text;
 //                 // Use functional update to ensure we have latest state
@@ -972,7 +1113,7 @@ export default App;
 
 //   const handleSaveEdit = (index) => {
 //     if (!editText.trim()) return;
-    
+
 //     const updatedMessages = [...messages];
 //     updatedMessages[index] = {
 //       ...updatedMessages[index],
@@ -1182,7 +1323,7 @@ export default App;
 //               <button onClick={handleRemoveImage} className="remove-attachment">×</button>
 //             </div>
 //           )}
-          
+
 //           <form onSubmit={handleSend} className="input-form">
 //             <div className="input-wrapper">
 //               <button
@@ -1200,7 +1341,7 @@ export default App;
 //                 onChange={handleImageUpload}
 //                 style={{ display: 'none' }}
 //               />
-              
+
 //               <textarea
 //                 ref={textareaRef}
 //                 value={input}
@@ -1216,7 +1357,7 @@ export default App;
 //                 rows="1"
 //                 className="message-input"
 //               />
-              
+
 //               <button
 //                 type="submit"
 //                 disabled={streamingIndex !== null || (!input.trim() && !imageFile && !imageUrl)}
@@ -1233,8 +1374,7 @@ export default App;
 //                 </svg>
 //               </button>
 //             </div>
-            
-          
+
 //           </form>
 //         </div>
 //       </div>
