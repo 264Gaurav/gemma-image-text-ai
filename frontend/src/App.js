@@ -216,7 +216,7 @@ function App() {
                 {message.role === 'user' ? (
                   <div className="user-text">{message.content}</div>
                 ) : (
-                  <div className="assistant-text">
+                  <div className="assistant-text p-4 rounded-md">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
@@ -274,16 +274,7 @@ function App() {
             </div>
           )}
 
-          {ollamaStatus && ollamaStatus.ollama_status !== 'connected' && (
-            <div className="error-banner ollama-warning">
-              ⚠️ Ollama Connection Issue: {ollamaStatus.ollama_error || 'Ollama is not connected'}
-              {ollamaStatus.ollama_url && (
-                <span className="ollama-url"> ({ollamaStatus.ollama_url})</span>
-              )}
-              <button onClick={() => setOllamaStatus(null)} className="error-close">×</button>
-            </div>
-          )}
-
+         
           {error && (
             <div className="error-banner">
               ⚠️ {error}
@@ -347,23 +338,7 @@ function App() {
               </button>
             </div>
             
-            <div className="input-footer">
-              <button
-                type="button"
-                onClick={() => {
-                  const url = prompt('Enter image URL:');
-                  if (url) {
-                    setImageUrl(url);
-                    setImageFile(null);
-                    setImagePreview(null);
-                  }
-                }}
-                className="url-btn"
-              >
-                🔗 Image URL
-              </button>
-              <span className="input-hint">Press Enter to send, Shift+Enter for new line</span>
-            </div>
+          
           </form>
         </div>
       </div>
