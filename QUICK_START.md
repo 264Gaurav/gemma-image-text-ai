@@ -89,3 +89,4 @@ The app will open at `http://localhost:3000`
 - Keep Ollama running while using the app
 - Both image analysis and text chat work seamlessly!
 
+

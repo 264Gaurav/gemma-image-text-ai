@@ -414,6 +414,18 @@ body {
   color: #ffffff;
 }
 
+.ollama-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+.ollama-url {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-left: 8px;
+}
+
 /* Input Container */
 .input-container {
   padding: 16px;

@@ -16,8 +16,28 @@ function App() {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [ollamaStatus, setOllamaStatus] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Check Ollama connectivity on mount
+  useEffect(() => {
+    const checkOllamaStatus = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/health`);
+        setOllamaStatus(response.data);
+      } catch (err) {
+        setOllamaStatus({
+          ollama_status: 'error',
+          ollama_error: 'Failed to connect to backend API'
+        });
+      }
+    };
+    checkOllamaStatus();
+    // Check every 30 seconds
+    const interval = setInterval(checkOllamaStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -251,6 +271,16 @@ function App() {
                   <span></span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {ollamaStatus && ollamaStatus.ollama_status !== 'connected' && (
+            <div className="error-banner ollama-warning">
+              ⚠️ Ollama Connection Issue: {ollamaStatus.ollama_error || 'Ollama is not connected'}
+              {ollamaStatus.ollama_url && (
+                <span className="ollama-url"> ({ollamaStatus.ollama_url})</span>
+              )}
+              <button onClick={() => setOllamaStatus(null)} className="error-close">×</button>
             </div>
           )}
 
