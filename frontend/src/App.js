@@ -16,33 +16,41 @@ function App() {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [ollamaStatus, setOllamaStatus] = useState(null);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [streamingIndex, setStreamingIndex] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
-  // Check Ollama connectivity on mount
-  useEffect(() => {
-    const checkOllamaStatus = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/health`);
-        setOllamaStatus(response.data);
-      } catch (err) {
-        setOllamaStatus({
-          ollama_status: 'error',
-          ollama_error: 'Failed to connect to backend API'
-        });
-      }
-    };
-    checkOllamaStatus();
-    // Check every 30 seconds
-    const interval = setInterval(checkOllamaStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    // Use requestAnimationFrame for smoother scrolling during streaming
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    });
+  }, [messages]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -85,6 +93,12 @@ function App() {
       return;
     }
 
+    // Cancel any ongoing stream
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
     const userMessage = {
       role: 'user',
       content: input.trim() || (imageFile || imageUrl ? 'Analyze this image' : ''),
@@ -92,11 +106,20 @@ function App() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentPrompt = input.trim() || (imageFile || imageUrl ? 'What is in this image? Describe it in detail.' : '');
     setInput('');
-    setLoading(true);
     setError(null);
 
-    const currentPrompt = input.trim() || (imageFile || imageUrl ? 'What is in this image? Describe it in detail.' : '');
+    // Create assistant message placeholder for streaming
+    const assistantMessageIndex = messages.length + 1;
+    const assistantMessage = {
+      role: 'assistant',
+      content: '',
+      streaming: true, // Mark as streaming
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+    setStreamingIndex(assistantMessageIndex);
+    // Don't set loading=true since we're showing the message directly
 
     try {
       const formData = new FormData();
@@ -108,35 +131,135 @@ function App() {
         formData.append('image_url', imageUrl.trim());
       }
 
-      const response = await axios.post(
-        `${API_URL}/analyze`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 180000,
-        }
-      );
+      // Use SSE streaming
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
-      if (response.data.success) {
-        const assistantMessage = {
-          role: 'assistant',
-          content: response.data.response,
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        setError(response.data.message || 'Failed to get response');
+      const response = await fetch(`${API_URL}/stream-analyze`, {
+        method: 'POST',
+        body: formData,
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulatedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete SSE events (ending with \n\n)
+        let eventEndIndex;
+        while ((eventEndIndex = buffer.indexOf('\n\n')) !== -1) {
+          const eventText = buffer.slice(0, eventEndIndex);
+          buffer = buffer.slice(eventEndIndex + 2);
+          
+          // Parse SSE event
+          const lines = eventText.split('\n');
+          let eventType = 'message';
+          let eventData = '';
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              eventData = line.slice(6);
+            }
+          }
+          
+          // Handle done event
+          if (eventType === 'done') {
+            break;
+          }
+          
+          // Parse data
+          if (eventData) {
+            try {
+              const parsed = JSON.parse(eventData);
+              
+              if (parsed.error) {
+                throw new Error(parsed.message || parsed.detail || 'Streaming error');
+              }
+              
+              if (parsed.text) {
+                accumulatedText += parsed.text;
+                // Use functional update to ensure we have latest state
+                setMessages(prev => {
+                  const updated = [...prev];
+                  if (updated[assistantMessageIndex]) {
+                    updated[assistantMessageIndex] = {
+                      ...updated[assistantMessageIndex],
+                      content: accumulatedText,
+                      streaming: true, // Keep streaming flag
+                    };
+                  }
+                  return updated;
+                });
+                // Smooth scroll during streaming
+                requestAnimationFrame(() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+                });
+              }
+            } catch (parseErr) {
+              // If JSON parse fails, skip this chunk
+              console.warn('Failed to parse SSE data:', eventData, parseErr);
+            }
+          }
+        }
+      }
+
+      // Final update - remove streaming flag
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[assistantMessageIndex]) {
+          updated[assistantMessageIndex] = {
+            ...updated[assistantMessageIndex],
+            content: accumulatedText,
+            streaming: false, // Mark as done streaming
+          };
+        }
+        return updated;
+      });
+
     } catch (err) {
-      console.error('Error:', err);
-      setError(
-        err.response?.data?.detail ||
-        err.message ||
-        'Failed to get response. Please make sure Ollama is running and try again.'
-      );
+      if (err.name === 'AbortError') {
+        // Stream was cancelled, remove the assistant message
+        setMessages(prev => prev.slice(0, assistantMessageIndex));
+      } else {
+        console.error('Error:', err);
+        setError(
+          err.message ||
+          'Failed to get response. Please make sure Ollama is running and try again.'
+        );
+        // Update the assistant message with error
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[assistantMessageIndex]) {
+            updated[assistantMessageIndex] = {
+              ...updated[assistantMessageIndex],
+              content: `Error: ${err.message || 'Failed to get response'}`,
+              streaming: false,
+            };
+          }
+          return updated;
+        });
+      }
     } finally {
       setLoading(false);
+      setStreamingIndex(null);
+      abortControllerRef.current = null;
       handleRemoveImage();
     }
   };
@@ -149,12 +272,18 @@ function App() {
   };
 
   const handleClear = () => {
+    // Cancel any ongoing stream
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setMessages([]);
     setInput('');
     setImageFile(null);
     setImagePreview(null);
     setImageUrl('');
     setError(null);
+    setStreamingIndex(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -163,6 +292,29 @@ function App() {
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     // You could add a toast notification here
+  };
+
+  const handleEditMessage = (index) => {
+    setEditingIndex(index);
+    setEditText(messages[index].content);
+  };
+
+  const handleSaveEdit = (index) => {
+    if (!editText.trim()) return;
+    
+    const updatedMessages = [...messages];
+    updatedMessages[index] = {
+      ...updatedMessages[index],
+      content: editText.trim()
+    };
+    setMessages(updatedMessages);
+    setEditingIndex(null);
+    setEditText('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditText('');
   };
 
   return (
@@ -180,7 +332,7 @@ function App() {
 
         {/* Messages Area */}
         <div className="messages-container">
-          {messages.length === 0 && !loading && (
+          {messages.length === 0 && (
             <div className="welcome-message">
               <div className="welcome-icon">🔍</div>
               <h2>Welcome to Gemma3 Vision</h2>
@@ -204,77 +356,143 @@ function App() {
 
           {messages.map((message, index) => (
             <div key={index} className={`message ${message.role}`}>
-              <div className="message-avatar">
-                {message.role === 'user' ? '👤' : '🤖'}
+              {message.role === 'user' && (
+                <div className="message-avatar user-avatar">
+                  👤
+                </div>
+              )}
+              <div className={`message-content-wrapper ${message.role}`}>
+                <div className="message-content">
+                  {message.image && (
+                    <div className="message-image">
+                      <img src={message.image} alt="Uploaded" />
+                    </div>
+                  )}
+                  {message.role === 'user' ? (
+                    editingIndex === index ? (
+                      <div className="edit-container">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey) {
+                              e.preventDefault();
+                              handleSaveEdit(index);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                          className="edit-textarea"
+                          rows={3}
+                          autoFocus
+                        />
+                        <div className="edit-actions">
+                          <button
+                            onClick={() => handleSaveEdit(index)}
+                            className="edit-save-btn"
+                            title="Save (Ctrl+Enter)"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="edit-cancel-btn"
+                            title="Cancel (Esc)"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="user-text-wrapper">
+                        <div className="user-text">{message.content}</div>
+                        <div className="message-actions">
+                          <button
+                            onClick={() => handleEditMessage(index)}
+                            className="message-action-btn"
+                            title="Edit message"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => copyToClipboard(message.content)}
+                            className="message-action-btn"
+                            title="Copy to clipboard"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="assistant-text-wrapper">
+                      <div className="assistant-text">
+                        {message.content ? (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({ node, inline, className, children, ...props }) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return !inline && match ? (
+                                  <SyntaxHighlighter
+                                    style={vscDarkPlus}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    {...props}
+                                  >
+                                    {String(children).replace(/\n$/, '')}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                              table({ children }) {
+                                return (
+                                  <div className="table-wrapper">
+                                    <table>{children}</table>
+                                  </div>
+                                );
+                              },
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        ) : (
+                          <div className="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
+                        )}
+                        {message.streaming && message.content && (
+                          <span className="streaming-cursor">▊</span>
+                        )}
+                      </div>
+                      {!message.streaming && message.content && (
+                        <div className="message-actions">
+                          <button
+                            onClick={() => copyToClipboard(message.content)}
+                            className="message-action-btn"
+                            title="Copy to clipboard"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="message-content">
-                {message.image && (
-                  <div className="message-image">
-                    <img src={message.image} alt="Uploaded" />
-                  </div>
-                )}
-                {message.role === 'user' ? (
-                  <div className="user-text">{message.content}</div>
-                ) : (
-                  <div className="assistant-text p-4 rounded-md">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code({ node, inline, className, children, ...props }) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          return !inline && match ? (
-                            <SyntaxHighlighter
-                              style={vscDarkPlus}
-                              language={match[1]}
-                              PreTag="div"
-                              {...props}
-                            >
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
-                          ) : (
-                            <code className={className} {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
-                        table({ children }) {
-                          return (
-                            <div className="table-wrapper">
-                              <table>{children}</table>
-                            </div>
-                          );
-                        },
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                    <button
-                      onClick={() => copyToClipboard(message.content)}
-                      className="copy-message-btn"
-                      title="Copy to clipboard"
-                    >
-                      📋
-                    </button>
-                  </div>
-                )}
-              </div>
+              {message.role === 'assistant' && (
+                <div className="message-avatar assistant-avatar">
+                  🤖
+                </div>
+              )}
             </div>
           ))}
 
-          {loading && (
-            <div className="message assistant">
-              <div className="message-avatar">🤖</div>
-              <div className="message-content">
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            </div>
-          )}
-
-         
           {error && (
             <div className="error-banner">
               ⚠️ {error}
@@ -313,8 +531,15 @@ function App() {
               />
               
               <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // Auto-resize
+                  e.target.style.height = 'auto';
+                  const scrollHeight = e.target.scrollHeight;
+                  e.target.style.height = `${Math.min(scrollHeight, 200)}px`;
+                }}
                 onKeyPress={handleKeyPress}
                 placeholder="Message Gemma3..."
                 rows="1"
@@ -323,7 +548,7 @@ function App() {
               
               <button
                 type="submit"
-                disabled={loading || (!input.trim() && !imageFile && !imageUrl)}
+                disabled={streamingIndex !== null || (!input.trim() && !imageFile && !imageUrl)}
                 className="send-btn"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
